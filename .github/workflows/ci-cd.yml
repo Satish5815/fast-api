@@ -78,6 +78,9 @@ jobs:
     environment: production
 
     steps:
+      - name: Check out deployment configuration
+        uses: actions/checkout@v4
+
       - name: Load EC2 SSH key
         uses: webfactory/ssh-agent@v0.9.1
         with:
@@ -101,6 +104,20 @@ jobs:
           IMAGE_TAG: latest
         run: |
           ssh "$EC2_USER@$EC2_HOST" \
+            "EC2_APP_DIR='$EC2_APP_DIR' bash -s" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          if [ -z "$EC2_APP_DIR" ]; then
+            echo "EC2_APP_DIR must be configured as a repository secret" >&2
+            exit 1
+          fi
+
+          mkdir -p "$EC2_APP_DIR"
+          REMOTE_SCRIPT
+
+          scp docker-compose.yml "$EC2_USER@$EC2_HOST:$EC2_APP_DIR/docker-compose.yml"
+
+          ssh "$EC2_USER@$EC2_HOST" \
             "DOCKERHUB_USERNAME='$DOCKERHUB_USERNAME' DOCKERHUB_TOKEN='$DOCKERHUB_TOKEN' IMAGE_TAG='$IMAGE_TAG' EC2_APP_DIR='$EC2_APP_DIR' bash -s" <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
 
@@ -109,15 +126,12 @@ jobs:
             exit 1
           fi
 
-          if [ ! -d "$EC2_APP_DIR/.git" ]; then
-            echo "Expected a git checkout at $EC2_APP_DIR" >&2
+          if [ ! -f "$EC2_APP_DIR/docker-compose.yml" ]; then
+            echo "Expected docker-compose.yml at $EC2_APP_DIR" >&2
             exit 1
           fi
 
           cd "$EC2_APP_DIR"
-          git fetch origin main
-          git checkout --force main
-          git reset --hard origin/main
           printf '%s' "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
           DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" IMAGE_TAG="$IMAGE_TAG" docker compose pull api
           DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" IMAGE_TAG="$IMAGE_TAG" docker compose up -d --force-recreate --remove-orphans
