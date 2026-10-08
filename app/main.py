@@ -48,6 +48,7 @@ def create_user(user:UserCreate, db: Session = Depends(get_db)):
     db.refresh(user_object)
     return user_object
     
+    
 @app.get('/user/{email}')
 def get_user(email:str,db:Session=Depends(get_db)):
     user=(
