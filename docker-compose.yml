@@ -1,9 +1,7 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: fast-api:latest
+    image: ${DOCKERHUB_USERNAME}/fast-api:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "80:8000"
